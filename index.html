@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Minesweeper</title>
+    <style>
+        body {
+            /*background-color: dimgrey;*/
+            margin: 0px;
+            padding: 0px;
+            height: 100%;
+            width: 100%;
+            position: absolute;
+        }
+        button {
+            background-color: darkgrey;
+            color: white;
+            border-width: 0px;
+            height: 30px;
+            margin-top: 15px;
+        }
+        .main {
+            height: 300px;
+            margin: calc((770px - 300px) / 2) calc((100% - 453px) / 2);
+            width: 453px;
+        }
+        #ctrl_panel {
+            float: left;
+            border-top: 1px solid black;
+            border-bottom: 1px solid black;
+            border-left: 1px solid black;
+            width: 150px;
+            height: 100%;
+            background-color: dimgrey;
+            color: white;
+        }
+        .disp_item *, .input_item * {
+            width: 75%;
+            margin-left: 5%;
+        }
+        .perform {
+            border: 1px solid darkgrey;
+            margin: 15px 5px 5px 5px;
+            height: calc(100% - 155px - 50px);
+        }
+        #board {
+            float: left;
+            border: 1px solid black;
+            width: 300px;
+            height: 100%;
+        }
+        .cube {
+            border: 1px solid dimgray;
+            float: left;
+        }
+        .swep {
+            border: 1px solid red;
+        }
+        .unknow {
+            border: 1px solid purple;
+        }
+        .step {
+            border: 1px solid lightgrey;
+        }
+        .mine {
+            background-color: lightgrey;
+        }
+    </style>
+</head>
+<body>
+    <div class="main">
+        <div id="ctrl_panel">
+            <div class="settings">
+                <div class="input_item">
+                    <label>ROW</label>
+                    <input id="row" type="number" max="15" min="0" value="10">
+                </div>
+                <div class="input_item">
+                    <label>COL</label>
+                    <input id="col" type="number" max="15" min="0" value="10">
+                </div>
+                <div class="input_item">
+                    <label>MINE</label>
+                    <input id="mine" type="number" max="225" min="0" value="10">
+                </div>
+                <div class="input_item">
+                    <button id="start">START</button>
+                </div>
+            </div>
+            <div class="perform">
+                <div class="disp_item">
+                    <label>Rest Mine</label>
+                    <input id="rest" type="number" readonly>
+                </div>
+                <div class="disp_item">
+                    <label>Timer</label>
+                    <input id="timer" type="text" readonly>
+                </div>
+            </div>
+        </div>
+        <div id="board">
+        </div>
+    </div>
+    <script>
+        var row_count;
+        var col_count;
+        var mine_count;
+        var rest_mine_count;
+        var rest_cube_count;
+        var start_time;
+        var board_dom = document.getElementById("board");
+        var timer;
+        var board;
+
+        //初始化参数
+        function initParam() {
+            row_count = parseInt(document.getElementById("row").value);
+            col_count = parseInt(document.getElementById("col").value);
+            board = new Array();
+            //初始化棋盘数组
+            for(var ridx = 0; ridx < row_count; ridx++) {
+                var row = new Array();
+                for(var cidx = 0; cidx < col_count; cidx++) {
+                    row.push(0);
+                }
+                board.push(row);
+            }
+            //总雷数
+            mine_count = parseInt(document.getElementById("mine").value);
+            if(mine_count > row_count * col_count) {
+                mine_count = row_count * col_count;
+                document.getElementById("mine").setAttribute("value", mine_count);
+            }
+            //清空棋盘
+            while(board_dom.hasChildNodes()) {
+                board_dom.removeChild(board_dom.firstChild);
+            }
+            //未揭开方格数、剩余雷数
+            rest_cube_count = row_count * col_count;
+            rest_mine_count = mine_count;
+            document.getElementById("rest").setAttribute("value", rest_mine_count);
+            //开始时间
+            document.getElementById("timer").setAttribute("value", "00:00");
+        }
+
+        //开始
+        document.getElementById("start").onclick = function() {
+            initParam();
+            genBoard();
+//            showBoard();
+            start_time = new Date();
+            timer = setInterval(function() {
+                document.getElementById("timer").setAttribute("value", fmtSecondToClock(parseInt((new Date() - start_time)/1000)));
+            }, 1000);
+        }
+
+        //禁止右键菜单
+        document.getElementById("board").oncontextmenu = function() {
+            return false;
+        }
+
+        //揭开所有方格
+        function showBoard() {
+            var cubes = board_dom.childNodes;
+            for(var idx = 0; idx < cubes.length; idx++) {
+                stepCube(cubes[idx], false)
+            }
+        }
+
+        //方格点击事件总控
+        function cubeAct(e) {
+            var clz = this.getAttribute("class");
+            if(clz == "cube swep") {
+                document.getElementById("rest").setAttribute("value", ++rest_mine_count);
+            }
+            if(e.button == 0) {
+                this.setAttribute("class", "cube step");
+                rest_cube_count--;
+                stepCube(this, true);
+            } else if(e.button == 2) {
+                if(clz == "cube") {
+                    //扫雷
+                    this.setAttribute("class", "cube swep")
+                    rest_cube_count--;
+                    document.getElementById("rest").setAttribute("value", --rest_mine_count);
+                } else if(clz == "cube swep") {
+                    //未知
+                    this.setAttribute("class", "cube unknow")
+                    rest_cube_count++;
+                } else if(clz == "cube unknow") {
+                    this.setAttribute("class", "cube")
+                }
+            }
+            if(rest_cube_count == 0) {
+                winGame();
+            }
+        }
+
+        //揭开方格
+        function stepCube(cube, mouse_act) {
+            var cube_id = cube.getAttribute("id")
+            cube_id = cube_id.substring(5, cube_id.length);
+            var row_num = parseInt(cube_id.split("-")[0]);
+            var col_num = parseInt(cube_id.split("-")[1]);
+            if(board[row_num][col_num] == -1) {
+                if(mouse_act) {
+                    loseGame();
+                    return;
+                }
+            } else if(board[row_num][col_num] == 0) {
+                var row_probs = [row_num - 1, row_num, row_num + 1];
+                var col_probs = [col_num - 1, col_num, col_num + 1];
+                for(ridx in row_probs) {
+                    var row_prob = row_probs[ridx];
+                    if(row_prob < 0 || row_prob >= row_count) {
+                        continue;
+                    } else {
+                        for(cidx in col_probs) {
+                            var col_prob = col_probs[cidx];
+                            if(col_prob < 0 || col_prob >= col_count) {
+                                continue;
+                            } else {
+                                if(col_num != col_prob || row_num != row_prob) {
+                                    var new_cube = document.getElementById("cube" + "-" + row_prob + "-" + col_prob);
+                                    if(new_cube.getAttribute("class") == "cube") {
+                                        new_cube.setAttribute("class", "cube step");
+                                        rest_cube_count--;
+                                        stepCube(new_cube, false);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            while(cube.hasChildNodes()) {
+                cube.removeChild(cube.firstChild);
+            }
+            var info = board[row_num][col_num];
+            if(info == -1) {
+                cube.setAttribute("class", "cube mine");
+            }
+            cube.appendChild(document.createTextNode((info <= 0)? "" : info));
+        }
+
+        //生成盘面
+        function genBoard(mine_sum) {
+            if(mine_sum == undefined) {
+                mine_sum = mine_count;
+            }
+            var cube_height = (board_dom.offsetHeight - 2 - col_count * 2) / col_count + "px";
+            var cube_width = (board_dom.offsetWidth - 2 - row_count * 2) / row_count + "px";
+            for(var row_num = 0; row_num < row_count; row_num++) {
+                for(var col_num = 0; col_num < col_count; col_num++) {
+                    if(document.getElementById("cube" + "-" + row_num + "-" + col_num) == undefined) {
+                        var cube = document.createElement("div");
+                        cube.setAttribute("class", "cube")
+                        cube.style.height = cube_height;
+                        cube.style.width = cube_width;
+                        cube.setAttribute("id", "cube" + "-" + row_num + "-" + col_num);
+                        cube.onmousedown = cubeAct;
+                        board_dom.appendChild(cube);
+                    }
+                    if(mine_sum > 0 && Math.random() >= 0.8 && board[row_num][col_num] != -1) {
+                        board[row_num][col_num] = -1;
+                        mine_sum --;
+                        refreshCubeTip(row_num, col_num);
+                    }
+                }
+            }
+            if(mine_sum > 0) {
+                genBoard(mine_sum)
+            }
+        }
+
+        //刷新盘面地雷警告数
+        function refreshCubeTip(row_num, col_num) {
+            row_probs = [row_num - 1, row_num, row_num + 1];
+            col_probs = [col_num - 1, col_num, col_num + 1];
+            for(ridx in row_probs) {
+                var row_prob = row_probs[ridx]
+                if(row_prob < 0 || row_prob >= row_count) {
+                    continue;
+                } else {
+                    for(cidx in col_probs) {
+                        var col_prob = col_probs[cidx]
+                        if(col_prob < 0 || col_prob >= col_count) {
+                            continue;
+                        } else {
+                            if(col_num != col_prob || row_num != row_prob) {
+                                if(board[row_prob][col_prob] == -1) {
+                                    continue;
+                                } else {
+                                    board[row_prob][col_prob] ++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        //游戏结束
+        function loseGame() {
+            clearInterval(timer);
+            showBoard();
+            alert("Grame Over");
+        }
+
+        //游戏胜利
+        function winGame() {
+            clearInterval(timer);
+            showBoard();
+            alert("You Win");
+        }
+
+        //将相差的秒数转换成H:m:s的格式
+        function fmtSecondToClock(seconds) {
+            var min = parseInt(seconds / 60);
+            var sec = seconds % 60
+            min = (min < 10)? "0" + min : min;
+            sec = (sec < 10)? "0" + sec : sec;
+            return min + ":" + sec;
+        }
+    </script>
+</body>
+</html>
